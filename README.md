@@ -24,6 +24,7 @@ the following programs.
 * RNAfold from ViennaRNA 2.4.14
 * dot2ct from RNAstructure 6.2
 * plmc 2018-05-16
+* PETfold 2.1
 
 The output format of nhmmer and cmsearch are modifed from
 ``eslMSAFILE_STOCKHOLM`` or ``eslMSAFILE_PFAM`` to ``eslMSAFILE_A2M``.
