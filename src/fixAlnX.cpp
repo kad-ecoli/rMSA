@@ -19,9 +19,12 @@ using namespace std;
 size_t fixAlnX(const string infile, const char replace, const string outfile)
 {
     /* read aln file */
-    vector<string> aln;
+    vector<string> aln_list;
+    vector<string> sequence_list;
     vector<string> header_list;
     string sequence;
+    string aln;
+    size_t r=0;
     size_t L=0;
     ifstream fp;
     if (infile!="-") fp.open(infile.c_str(),ios::in);
@@ -36,15 +39,22 @@ size_t fixAlnX(const string infile, const char replace, const string outfile)
             header_list.push_back(sequence);
             continue;
         }
-        if (L==0) L=sequence.length();
-        else if (sequence.length()!=L)
+
+        aln="";
+        for (r=0;r<sequence.size();r++)
+            if ((sequence[r]<'a' || sequence[r]>'z') && sequence[r]!='.')
+                aln+=sequence[r];
+        if (aln_list.size()==0) L=aln.size();
+        else if (aln_list.size() && L!=aln.size())
         {
-            cerr<<"ERROR! length not match for sequence\n"<<aln.size();
+            cerr<<"ERROR! length mismatch for sequence "<<aln_list.size()+1
+                <<". "<<L<<"!="<<aln.size()<<endl;
             exit(0);
         }
 
-        aln.push_back(sequence);
-        if (aln.size()==INT_MAX)
+        aln_list.push_back(aln);
+        sequence_list.push_back(sequence);
+        if (aln_list.size()==INT_MAX)
         {
             cerr<<"WARNING! Cannot read beyond sequence number"<<INT_MAX<<endl;
             break;
@@ -56,7 +66,7 @@ size_t fixAlnX(const string infile, const char replace, const string outfile)
     string aa_list="";
     vector<vector<size_t> >aa_count_mat;
     vector<size_t> aa_count_vec(L,0);
-    size_t seq_num=aln.size();
+    size_t seq_num=aln_list.size();
     size_t a,i,j;
     char aa;
     bool new_aa;
@@ -64,8 +74,8 @@ size_t fixAlnX(const string infile, const char replace, const string outfile)
     {
         for (j=0;j<L;j++)
         {
-            aa=aln[i][j];
-            if (aa=='-' || aa=='.' || aa==replace) continue;
+            aa=aln_list[i][j];
+            if (aa=='-' || aa==replace) continue;
             new_aa=true;
             for (a=0;a<aa_list.size();a++)
             {
@@ -91,16 +101,20 @@ size_t fixAlnX(const string infile, const char replace, const string outfile)
                 aa_count_vec[j]=a;
     
     vector<vector<size_t> >().swap(aa_count_mat);
+    vector<string> ().swap(aln_list);
     
     /* output */
     string txt;
     for (i=0;i<seq_num;i++)
     {
         if (header_list.size()>i) txt+=header_list[i]+'\n';
-        for (j=0;j<L;j++)
+        r=0;
+        for (j=0;j<sequence_list[i].size();j++)
         {
-            if (aln[i][j]!=replace) txt+=aln[i][j];
-            else txt+=aa_list[aa_count_vec[j]];
+            aa=sequence_list[i][j];
+            if (aa==replace) aa=aa_list[aa_count_vec[r]];
+            txt+=aa;
+            r+=((aa<'a' || aa>'z') && aa!='.');
         }
         txt+='\n';
     }
@@ -115,12 +129,13 @@ size_t fixAlnX(const string infile, const char replace, const string outfile)
     }
 
     /* clean up */
-    vector<string> ().swap(aln);
     vector<string> ().swap(header_list);
+    vector<string> ().swap(sequence_list);
     sequence.clear();
+    aln.clear();
     aa_count_vec.clear();
     txt.clear();
-    return aln.size();
+    return seq_num;
 }
 
 
