@@ -22,6 +22,7 @@ size_t fastaNA(const string infile="-", const string outfile="-")
     size_t nseqs=0;
     size_t i;
     char na;
+    bool low=false;
     while ((infile!="-")?fp_in.good():cin.good())
     {
         if (infile!="-") getline(fp_in,line);
@@ -39,11 +40,13 @@ size_t fastaNA(const string infile="-", const string outfile="-")
             for (i=0;i<line.length();i++)
             {
                 na=line[i];
-                if ('a'<=na && na<='z') na-=32;
+                low=('a'<=na && na<='z');
+                if (low) na-=32;
                 if      (na=='I') na='A';
                 else if (na=='U') na='T';
                 if ('A'<=na && na<='Z' && (na!='A' && na!='T'
                                        &&  na!='C' && na!='G')) na='N';
+                if (low) na+=32;
                 sequence+=na;
             }
             if (outfile!="-") fp_out<<sequence<<endl;
