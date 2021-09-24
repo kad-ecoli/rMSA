@@ -709,7 +709,7 @@ sub addSS2cm
 {
     my ($infas,$outcm)=@_;
     ## overwrite sequence header to avoid duplicated name during cmbuild ##
-    &System("$bindir/a3m2msa $infas |$bindir/fasta2pfam - |grep -ohP '\\S+\$' | sort | uniq | cat -n | grep -ohP '\\d+\\s+\\S+'|sed 's/^/>/g'|sed 's/\\t/\\n/g' > $tmpdir/nhmmer.fas");
+    &System("$bindir/a3m2msa $infas |$bindir/fasta2pfam - |grep -ohP '\\S+\$' | cat -n | grep -ohP '\\d+\\s+\\S+'|sed 's/^/>/g'|sed 's/\\t/\\n/g' > $tmpdir/nhmmer.fas");
     &System("$bindir/reformat.pl fas sto $tmpdir/nhmmer.fas $tmpdir/nhmmer.sto");
     #&System("$bindir/reformat.pl fas sto $infas $tmpdir/nhmmer.sto");
 
@@ -746,6 +746,11 @@ sub addSS2cm
     close(FP);
 
     &System("$bindir/cmbuild --hand -F $outcm $tmpdir/PETfold.gap.sto");
+    if (!-s "$outcm")
+    {
+        print "ERROR! cmbuild did not make $outcm\n";
+	exit(1);
+    }
     &System("$bindir/cmcalibrate --cpu $cpu $outcm");
 }
 
@@ -784,9 +789,14 @@ sub addQuery2a2m
             ## merge msa by clustalo ##
             print "echo $Lch != $Lt. realign by clustalo\n";
             &System("$bindir/reformat.pl a3m a2m $outfile.tmp $outfile.a2m");
-            &System("$bindir/clustalo --p1=$tmpdir/seq.fasta --p2=$outfile.a2m --is-profile --infmt=a2m --threads=$cpu -o $outfile.clustalo.fas");
-            &System("$bindir/reformat.pl fas a3m $outfile.clustalo.afa $outfile.clustalo.a3m -M first");
+            &System("$bindir/clustalo --p1=$tmpdir/seq.fasta --p2=$outfile.a2m --is-profile --infmt=a2m --threads=$cpu -o $outfile.clustalo.fas --force");
+            &System("$bindir/reformat.pl fas a3m $outfile.clustalo.fas $outfile.clustalo.a3m -M first");
 	    &System("$bindir/fastaOneLine $outfile.clustalo.a3m | $bindir/fixAlnX - N $outfile");
+	    if (!-s "$outfile.clustalo.a3m" || !-s "$outfile")
+	    {
+	        print "ERROR! Cannot realign by clustalo: missing $outfile.clustalo.a3m or $outfile\n";
+		exit(1);
+	    }
             &System("rm $outfile.a2m $outfile.clustalo.fas $outfile.clustalo.a3m");
         }
         else
