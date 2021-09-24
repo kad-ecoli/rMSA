@@ -35,6 +35,23 @@ my $tmpfile=$outfile.".tmp";
 my $namedmp="";
 $namedmp   =$ARGV[2] if (@ARGV>2);
 
+if (!-s "$db1tsv")
+{
+    print "ERROR! No mapping file $db1tsv\n";
+    exit(1);
+}
+if (!-s "$db2")
+{
+    print "ERROR! No such file $db2\n";
+    exit(1);
+}
+if (!-s "$db2.nal" && !-s "$db2.ndb")
+{
+    print "ERROR! $db2 not in blastn format. Please run\n";
+    print "$dbdir/script/makeblastdb -in $db2 -parse_seqids -hash_index -dbtype nucl\n";
+    exit(1);
+}
+
 my @header_list=();
 my @accession_list=();
 my $accession="";
