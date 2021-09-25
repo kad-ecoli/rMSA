@@ -113,6 +113,7 @@ if (!-s "$inputfasta")
 }
 
 $inputfasta=abs_path($inputfasta);
+my $prefix=dirname($inputfasta);
 
 foreach my $db(@db_list)
 {
@@ -185,6 +186,11 @@ if ($tmpdir eq dirname($inputfasta))
     print "ERROR! Query fasta cannot be put inside tmpdir\n";
     exit(1);
 }
+if ($tmpdir eq $prefix)
+{
+    print "ERROR! tmpdir cannot be the input folder\n";
+    exit(1);
+}
 
 #### prepare query fasta ####
 my $seqnum=`grep '^>' $inputfasta|wc -l`;
@@ -226,7 +232,7 @@ print "using $cpu cpu\n";
 #### prepare secondary structure ####
 if (length $ssfile==0)
 {
-    $ssfile="PETfold.dbn";
+    $ssfile="$prefix/PETfold.dbn";
     &System("cp $ssfile $tmpdir/PETfold.dbn") if (-s "$ssfile");
 }
 else
@@ -270,8 +276,8 @@ else
 
 #### perform rfam search ####
 print "==== rfam pre-screening ====\n";
-if (length $db0>0 && (!-s "db.gz" || `zcat db.gz|wc -l`+0==0)
-                  && (!-s "db0.gz"|| `zcat db0.gz|wc -l`+0==0))
+if (length $db0>0 && (!-s "$prefix/db.gz" || `zcat $prefix/db.gz|wc -l`+0==0)
+                  && (!-s "$prefix/db0.gz"|| `zcat $prefix/db0.gz|wc -l`+0==0))
 {
     system("$bindir/cmscan --tblout $tmpdir/cmscan.tblout -o $tmpdir/cmscan.out --noali $db0 $tmpdir/seq.fasta");
     my @family_list=();
@@ -363,7 +369,7 @@ if (length $db0>0 && (!-s "db.gz" || `zcat db.gz|wc -l`+0==0)
     if (-s "$tmpdir/rfam1.db" || -s "$tmpdir/rfam2.db")
     {
         &System("cat $tmpdir/rfam1.db $tmpdir/rfam2.db > $tmpdir/db0");
-        &plain2gz("$tmpdir/db0", "db0.gz");
+        &plain2gz("$tmpdir/db0", "$prefix/db0.gz");
     }
     system("wc -l $tmpdir/rfam*.db $tmpdir/db0");
 }
@@ -371,9 +377,9 @@ if (length $db0>0 && (!-s "db.gz" || `zcat db.gz|wc -l`+0==0)
 #### perform blastn ####
 print "==== $task pre-screening ====\n";
 
-if (-s "db.gz" && `zcat db.gz|wc -l`+0>0)
+if (-s "$prefix/db.gz" && `zcat $prefix/db.gz|wc -l`+0>0)
 {
-    &gz2plain("db.gz", "$tmpdir/db");
+    &gz2plain("$prefix/db.gz", "$tmpdir/db");
 }
 else
 {
@@ -393,19 +399,19 @@ else
     }
     &System("cat $tmpdir/db0 $tmpdir/blastn*.db > $tmpdir/trim.db");
     &rmredundant_rawseq("$tmpdir/trim.db", "$tmpdir/db");
-    &plain2gz("$tmpdir/db", "db.gz");
+    &plain2gz("$tmpdir/db", "$prefix/db.gz");
 }
-if (-s "db0.gz" && -s "db.gz" && `zcat db.gz|wc -l`+0>0)
+if (-s "$prefix/db0.gz" && -s "$prefix/db.gz" && `zcat $prefix/db.gz|wc -l`+0>0)
 {
-    &System("rm db0.gz");
+    &System("rm $prefix/db0.gz");
 }
 
 #### nhmmer, cmbuild and cmcalibrate ####
 my $hitnum=`grep '^>' $tmpdir/db|wc -l`+0;
 print "==== making covariance model from local alignment of $hitnum sequences by nhmmer ====\n";
-if (-s "infernal.cm")
+if (-s "$prefix/infernal.cm")
 {
-    &System("cp infernal.cm $tmpdir/infernal.cm");
+    &System("cp $prefix/infernal.cm $tmpdir/infernal.cm");
 }
 else
 {
@@ -414,20 +420,20 @@ else
     &addQuery2a2m("$tmpdir/nhmmer.a2m","$tmpdir/nhmmer.unfilter.a3m");
     &run_hhfilter($max_hhfilter_seqs,0,"$tmpdir/nhmmer.unfilter.a3m","$tmpdir/nhmmer.a3m");
     &addSS2cm("$tmpdir/nhmmer.a3m", "$tmpdir/infernal.cm");
-    &System("cp $tmpdir/infernal.cm infernal.cm");
+    &System("cp $tmpdir/infernal.cm $prefix/infernal.cm");
 }
 
 print "==== cmsearch hits from cmscan and blastn ====\n";
-if (-s "deep.cmsearch.a3m.gz" && `zcat deep.cmsearch.a3m.gz|wc -l`+0>0)
+if (-s "$prefix/deep.cmsearch.a3m.gz" && `zcat $prefix/deep.cmsearch.a3m.gz|wc -l`+0>0)
 {
-    &gz2plain("deep.cmsearch.a3m.gz", "$tmpdir/cmsearch.a3m");
+    &gz2plain("$prefix/deep.cmsearch.a3m.gz", "$tmpdir/cmsearch.a3m");
 }
 else
 {
     &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.a2m --cpu $cpu $tmpdir/infernal.cm $tmpdir/db|grep 'no alignment saved'");
     &addQuery2a2m("$tmpdir/cmsearch.a2m","$tmpdir/cmsearch.unfilter.a3m");
     &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.unfilter.a3m","$tmpdir/cmsearch.a3m");
-    &plain2gz("$tmpdir/cmsearch.a3m", "deep.cmsearch.a3m.gz");
+    &plain2gz("$tmpdir/cmsearch.a3m", "$prefix/deep.cmsearch.a3m.gz");
 }
 
 my $Nf=&run_calNf("$tmpdir/cmsearch.a3m");
@@ -435,7 +441,7 @@ $hitnum=`grep '^>' $tmpdir/cmsearch.a3m|wc -l`+0;
 if ($Nf>=$target_Nf||($fast>=2 && $hitnum>=$max_hhfilter_seqs))
 {
     print "output cmsearch.a3m (Nf>=$Nf) as final MSA\n";
-    &System("cp $tmpdir/cmsearch.a3m deep.a3m");
+    &System("cp $tmpdir/cmsearch.a3m $prefix/deep.a3m");
     &Exit($tmpdir,$rmtmp);
 }
 
@@ -443,11 +449,11 @@ if ($Nf>=$target_Nf||($fast>=2 && $hitnum>=$max_hhfilter_seqs))
 print "==== cmsearch hits from cmsearch ====\n";
 for (my $dd=1;$dd<=2;$dd++)
 {
-    if (-s "db$dd.gz" && (`zcat db$dd.gz|wc -l`+0>0 ||
-       (-s "deep.cmsearch.$dd.a3m.gz" && `zcat deep.cmsearch.$dd.a3m.gz|wc -l`+0>0)))
+    if (-s "$prefix/db$dd.gz" && (`zcat $prefix/db$dd.gz|wc -l`+0>0 ||
+       (-s "$prefix/deep.cmsearch.$dd.a3m.gz" && `zcat $prefix/deep.cmsearch.$dd.a3m.gz|wc -l`+0>0)))
     {   # sometimes cmsearch db$dd cannot find additional hits.
-        # in this case, db$dd.gz is empty.
-        &gz2plain("db$dd.gz", "$tmpdir/db$dd");
+        # in this case, $prefix/db$dd.gz is empty.
+        &gz2plain("$prefix/db$dd.gz", "$tmpdir/db$dd");
     }
     else
     {
@@ -478,25 +484,25 @@ for (my $dd=1;$dd<=2;$dd++)
         }
         &System("cat $tmpdir/cmsearch*.$dd.db > $tmpdir/trim.$dd.db");
         &rmredundant_rawseq("$tmpdir/trim.$dd.db", "$tmpdir/db$dd");
-        &plain2gz("$tmpdir/db$dd", "db$dd.gz");
+        &plain2gz("$tmpdir/db$dd", "$prefix/db$dd.gz");
         system("wc -l $tmpdir/cmsearch*.$dd.db $tmpdir/db$dd");
     }
     
-    if (`cat $tmpdir/db$dd|wc -l`+0==0 && ! -s "deep.cmsearch.$dd.a3m.gz")
+    if (`cat $tmpdir/db$dd|wc -l`+0==0 && ! -s "$prefix/deep.cmsearch.$dd.a3m.gz")
     {
         if    ($dd==1)
         {
-            &System("cp deep.cmsearch.a3m.gz   deep.cmsearch.1.a3m.gz");
+            &System("cp $prefix/deep.cmsearch.a3m.gz $prefix/deep.cmsearch.1.a3m.gz");
         }
         elsif ($dd==2)
         {
-            &System("cp deep.cmsearch.1.a3m.gz deep.cmsearch.2.a3m.gz");
+            &System("cp $prefix/deep.cmsearch.1.a3m.gz $prefix/deep.cmsearch.2.a3m.gz");
         }
     }
 
-    if (-s "deep.cmsearch.$dd.a3m.gz" && `zcat deep.cmsearch.$dd.a3m.gz|wc -l`+0>0)
+    if (-s "$prefix/deep.cmsearch.$dd.a3m.gz" && `zcat $prefix/deep.cmsearch.$dd.a3m.gz|wc -l`+0>0)
     {
-        &gz2plain("deep.cmsearch.$dd.a3m.gz", "$tmpdir/cmsearch.$dd.a3m");
+        &gz2plain("$prefix/deep.cmsearch.$dd.a3m.gz", "$tmpdir/cmsearch.$dd.a3m");
     }
     else
     {
@@ -511,14 +517,14 @@ for (my $dd=1;$dd<=2;$dd++)
         &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.$dd.a2m --cpu $cpu $incE $tmpdir/infernal.cm $tmpdir/dball|grep 'no alignment saved'");
         &addQuery2a2m("$tmpdir/cmsearch.$dd.a2m","$tmpdir/cmsearch.$dd.unfilter.a3m");
         &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.$dd.unfilter.a3m","$tmpdir/cmsearch.$dd.a3m");
-        &plain2gz("$tmpdir/cmsearch.$dd.a3m", "deep.cmsearch.$dd.a3m.gz");
+        &plain2gz("$tmpdir/cmsearch.$dd.a3m", "$prefix/deep.cmsearch.$dd.a3m.gz");
     }
     $Nf=&run_calNf("$tmpdir/cmsearch.$dd.a3m");
     $hitnum=`grep '^>' $tmpdir/cmsearch.$dd.a3m|wc -l`+0;
     if ($Nf>=$target_Nf || ($fast && $hitnum>=$max_hhfilter_seqs))
     {
         print "output cmsearch.$dd.a3m (Nf>=$Nf) as final MSA\n";
-        &System("cp $tmpdir/cmsearch.$dd.a3m deep.a3m");
+        &System("cp $tmpdir/cmsearch.$dd.a3m $prefix/deep.a3m");
         &Exit($tmpdir,$rmtmp);
     }
 }
@@ -547,11 +553,11 @@ foreach my $msa(qw(
 if ($Nf>=$target_Nf || ($fast && $hitnum>=$max_hhfilter_seqs))
 {
     print "output $final_msa (Nf=$max_Nf) as final MSA\n";
-    &System("cp $tmpdir/$final_msa deep.a3m");
+    &System("cp $tmpdir/$final_msa $prefix/deep.a3m");
     &Exit($tmpdir,$rmtmp);
 }
 print "output $final_msa (Nf=$max_Nf) as final MSA A\n";
-&plain2gz("$tmpdir/$final_msa", "deep.a.a3m.gz");
+&plain2gz("$tmpdir/$final_msa", "$prefix/deep.a.a3m.gz");
 
 #### RNAcmap style MSA ####
 print "==== alternative covariance model without nhmmer ====\n";
@@ -569,9 +575,9 @@ for (my $d=0;$d<scalar @db_list;$d++)
 {
     my $db="$db_list[$d]";
     #&System("$bindir/makeblastdb -in $db -parse_seqids -hash_index -dbtype nucl") if (! -s "$db.nal");
-    if (-s "blastn.b$d.cm")
+    if (-s "$prefix/blastn.b$d.cm")
     {
-        &System("cp blastn.b$d.cm $tmpdir/blastn.cm");
+        &System("cp $prefix/blastn.b$d.cm $tmpdir/blastn.cm");
     }
     else
     {
@@ -581,12 +587,12 @@ for (my $d=0;$d<scalar @db_list;$d++)
         &System("$bindir/parse_blastn_local.pl $tmpdir/seq.blastn.out $tmpdir/seq.fasta $tmpdir/seq.blastn.N.a3m");
         &System("$bindir/fixAlnX $tmpdir/seq.blastn.N.a3m N $tmpdir/seq.blastn.a3m");
         &addSS2cm("$tmpdir/seq.blastn.a3m", "$tmpdir/blastn.cm");
-        &System("cp $tmpdir/blastn.cm blastn.b$d.cm");
+        &System("cp $tmpdir/blastn.cm $prefix/blastn.b$d.cm");
     }
 
-    if (-s "deep.cmsearch.b$d.a3m.gz" && `zcat deep.cmsearch.b$d.a3m.gz|wc -l`+0>0)
+    if (-s "$prefix/deep.cmsearch.b$d.a3m.gz" && `zcat $prefix/deep.cmsearch.b$d.a3m.gz|wc -l`+0>0)
     {
-        &gz2plain("deep.cmsearch.b$d.a3m.gz", "$tmpdir/cmsearch.b$d.a3m");
+        &gz2plain("$prefix/deep.cmsearch.b$d.a3m.gz", "$tmpdir/cmsearch.b$d.a3m");
     }
     else
     {
@@ -603,7 +609,7 @@ for (my $d=0;$d<scalar @db_list;$d++)
                 "$tmpdir/cmsearch.b$d.uniq.a3m","$tmpdir/cmsearch.b$d.a3m");
         }
         &System("rm $tmpdir/cmsearch.b$d.uniq.a3m");
-        &plain2gz("$tmpdir/cmsearch.b$d.a3m", "deep.cmsearch.b$d.a3m.gz");
+        &plain2gz("$tmpdir/cmsearch.b$d.a3m", "$prefix/deep.cmsearch.b$d.a3m.gz");
     }
     $hitnum=`grep '^>' $tmpdir/cmsearch.b$d.a3m|wc -l`+0;
     $Nf=&run_calNf("$tmpdir/cmsearch.b$d.a3m");
@@ -616,15 +622,15 @@ for (my $d=0;$d<scalar @db_list;$d++)
 }
 
 print "output $final_msa (Nf=$max_Nf) as final MSA B\n";
-&plain2gz("$tmpdir/$final_msa", "deep.b.a3m.gz");
+&plain2gz("$tmpdir/$final_msa", "$prefix/deep.b.a3m.gz");
 
 #### select MSA by plmc score ####
 # It is also possible to use plmc to score all MSAs, not just MSA A & B.
 # Since either scoring scheme generate about the same performance, and
 # plmc takes a long term for large MSAs, only MSA A & MSA B are scored.
-if (-s "deep.contact.txt")
+if (-s "$prefix/deep.contact.txt")
 {
-    &System("cp deep.contact.txt $tmpdir/sorted.contact.txt");
+    &System("cp $prefix/deep.contact.txt $tmpdir/sorted.contact.txt");
 }
 else
 {
@@ -647,7 +653,7 @@ else
     }
 
     my $txt="";
-    foreach my $msa(("deep.a.a3m.gz","deep.b.a3m.gz"))
+    foreach my $msa(("$prefix/deep.a.a3m.gz","$prefix/deep.b.a3m.gz"))
     {
         &gz2plain("$msa","$tmpdir/seq.a3m");
         &System("$bindir/a3m2msa $tmpdir/seq.a3m $tmpdir/seq.afa");
@@ -690,16 +696,16 @@ else
     close(FP);
 
     &System("sort -k4gr $tmpdir/unsorted.contact.txt > $tmpdir/sorted.contact.txt");
-    &System("cp $tmpdir/sorted.contact.txt deep.contact.txt");
+    &System("cp $tmpdir/sorted.contact.txt $prefix/deep.contact.txt");
 }
 
-my $final_msa="deep.a.a3m";
+my $final_msa="$prefix/deep.a.a3m";
 if (`head -1 $tmpdir/sorted.contact.txt`=~/^(\S+)/)
 {
     $final_msa="$1";
 }
 print "output $final_msa as final MSA\n";
-&System("zcat $final_msa > deep.a3m");
+&System("zcat $final_msa > $prefix/deep.a3m");
 &Exit($tmpdir,$rmtmp);
 
 
@@ -801,7 +807,7 @@ sub addQuery2a2m
         }
         else
         {
-            &System("cat $tmpdir/seq.fasta $outfile.tmp | $bindir/fastaOneLine - |$bindir/fixAlnX - N $outfile");
+            &System("cat $tmpdir/seq.fasta $outfile.tmp | $bindir/fastaOneLine - | $bindir/fixAlnX - N $outfile");
         }
         &System("rm $outfile.tmp");
     }
