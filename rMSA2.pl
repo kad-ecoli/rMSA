@@ -781,29 +781,25 @@ sub addQuery2a2m
     }
     else
     {
-        #  fastaNA
-	#  reformat.pl a3m a2m infile.a2m reformat.a2m # inser dots
-	#  clustalo --p1=seq.fasta --p2=reformat.a2m  --is-profile --infmt=a2m -o clustalo.afa --force
-	#  reformat.pl fas a3m clustalo.afa clustalo.a3m -M first
-	#  need to revise fixAlnX so that it works on a3m files
+        #&System("$bindir/a3m2msa $infile | grep -ohP '^\\S+' > $outfile.tmp");
         &System("cat $infile | grep -ohP '^\\S+' | $bindir/fastaNA - > $outfile.tmp");
-        my $template_seq=`head -2 $outfile.tmp|$bindir/a3m2msa -|tail -1`;
+        &System("$bindir/a3m2msa $outfile.tmp $outfile.msa");
+        my $template_seq=`head -2 $outfile.msa|tail -1`;
         chomp($template_seq);
         my $Lt=length $template_seq;
         if ($Lch != $Lt)
         {
             ## merge msa by clustalo ##
             print "echo $Lch != $Lt. realign by clustalo\n";
-            &System("$bindir/reformat.pl a3m a2m $outfile.tmp $outfile.a2m");
-            &System("$bindir/clustalo --p1=$tmpdir/seq.fasta --p2=$outfile.a2m --is-profile --infmt=a2m --threads=$cpu -o $outfile.clustalo.fas --force");
-            &System("$bindir/reformat.pl fas a3m $outfile.clustalo.fas $outfile.clustalo.a3m -M first");
-	    &System("$bindir/fastaOneLine $outfile.clustalo.a3m | $bindir/fixAlnX - N $outfile");
-	    if (!-s "$outfile.clustalo.a3m" || !-s "$outfile")
+	    &System("$bindir/addQuery2a3m $tmpdir/seq.fasta $outfile.tmp $outfile.a3m > $outfile.cscore");
+	    my $cscore=`cat $outfile.cscore`+0.;
+	    if ($cscore<0.8)
 	    {
-	        print "ERROR! Cannot realign by clustalo: missing $outfile.clustalo.a3m or $outfile\n";
-		exit(1);
+	        print "addQuery2a2m cscore=$cscore. redo alignment by clustalo\n";
+                &System("$bindir/clustalo --p1=$tmpdir/seq.fasta --p2=$outfile.msa --is-profile --threads=$cpu | $bindir/fastaOneLine - $outfile.afa");
+                &System("$bindir/insAln $outfile.tmp $outfile.afa $outfile.a3m");
 	    }
-            &System("rm $outfile.a2m $outfile.clustalo.fas $outfile.clustalo.a3m");
+	    &System("$bindir/fixAlnX $outfile.a3m N $outfile");
         }
         else
         {
@@ -840,6 +836,11 @@ sub retrieveSeq
 sub rmredundant_rawseq
 {
     my ($infile,$outfile)=@_;
+    #if (`grep '>' $infile|wc -l`+0<$max_aln_seqs)
+    #{
+        #&System("cp $infile $outfile");
+        #return;
+    #}
     my $throw_away_sequences=int(0.4*$Lch);
     $throw_away_sequences=9 if ($throw_away_sequences<10);
     my @c_list=(1.00, 0.99, 0.95, 0.90);
