@@ -2,10 +2,16 @@ CC=g++
 CFLAGS=-O3
 LDFLAGS=-static
 
-prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN rFUpred filla3m
+prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN rFUpred filla3m insAln addQuery2a3m
 
 
 all: ${prog}
+
+addQuery2a3m: addQuery2a3m.cpp
+	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
+
+insAln: insAln.cpp
+	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
 
 filla3m: filla3m.cpp
 	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
