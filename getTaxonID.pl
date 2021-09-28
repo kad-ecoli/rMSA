@@ -58,7 +58,6 @@ my $accession="";
 my @rc_list=();
 my @nt_list=();
 my $header;
-my $cmd="grep -E '";
 foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
 {
     chomp($header);
@@ -67,7 +66,6 @@ foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
     {
         $accession="$1";
         push(@rc_list,($accession)) if (! grep( /^$accession$/, @rc_list));
-        $cmd.="$accession|";
     }
     elsif ($header=~/^([_A-Z0-9]+)[.]/)
     {
@@ -89,33 +87,14 @@ printf "mapping %d RNAcentral accession(s)\n", scalar @rc_list;
 my %taxon_dict;
 %taxon_dict = map { $_ => "" } @accession_list;
 my $taxonIDs;
-if (scalar @rc_list)
+foreach my $line(`grep -ohP ">URS[A-Z0-9]+" $infile | sed 's/>//g' | $bindir/getRNAcentralTaxonID - $db1tsv -`)
 {
-    $cmd=substr($cmd,0,(length $cmd)-1)."' $db1tsv";
-    my $success=0;
-    #print "$cmd\n";
-    foreach my $line(`$cmd`)
+    chomp($line);
+    if ($line=~/(\S+)\t(\S+)$/)
     {
-        if ($line=~/^(URS[A-Z0-9]+)\s\d+\s([,\d]+)$/)
-        {
-            $accession="$1";
-            $taxonIDs="$2";
-            $taxon_dict{$accession}=$taxonIDs;
-            $success++;
-        }
-    }
-    if ($success==0)
-    {
-        printf "0 RNAcentral accession mapped. re-search full database.\n";
-        foreach my $line(`cat $db1tsv`)
-        {
-            if ($line=~/^(URS[A-Z0-9]+)\s\d+\s([,\d]+)$/)
-            {
-                $accession="$1";
-                $taxonIDs="$2";
-                $taxon_dict{$accession}=$taxonIDs;
-            }
-        }
+        $accession="$1";
+        $taxonIDs="$2";
+        $taxon_dict{$accession}=$taxonIDs;
     }
 }
 

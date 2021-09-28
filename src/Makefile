@@ -2,10 +2,13 @@ CC=g++
 CFLAGS=-O3
 LDFLAGS=-static
 
-prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN rFUpred filla3m insAln addQuery2a3m
+prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN rFUpred filla3m insAln addQuery2a3m getRNAcentralTaxonID
 
 
 all: ${prog}
+
+getRNAcentralTaxonID: getRNAcentralTaxonID.cpp
+	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
 
 addQuery2a3m: addQuery2a3m.cpp
 	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
