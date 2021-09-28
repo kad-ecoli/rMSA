@@ -31,7 +31,6 @@ if (@ARGV<2)
 
 my $infile =$ARGV[0];
 my $outfile=$ARGV[1];
-my $tmpfile=$outfile.".tmp";
 my $namedmp="";
 $namedmp   =$ARGV[2] if (@ARGV>2);
 
@@ -52,125 +51,133 @@ if (!-s "$db2.nal" && !-s "$db2.ndb")
     exit(1);
 }
 
-my @header_list=();
-my @accession_list=();
-my $accession="";
-my @rc_list=();
-my @nt_list=();
-my $header;
-foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
-{
-    chomp($header);
-    $accession="";
-    if ($header=~/^(URS[A-Z0-9]+)/) # RNAcentral
-    {
-        $accession="$1";
-        push(@rc_list,($accession)) if (! grep( /^$accession$/, @rc_list));
-    }
-    elsif ($header=~/^([_A-Z0-9]+)[.]/)
-    {
-        $accession="$1";
-        push(@nt_list,($accession)) if (! grep( /^$accession$/, @nt_list));
-    }
-    if (length $accession)
-    {
-        push(@header_list,($header));
-        push(@accession_list,($accession));
-    }
-    else
-    {
-        print "skip unmappable entry >".$header."\n";
-    }
-}
+&getTaxonID($infile,$outfile,$namedmp);
 
-printf "mapping %d RNAcentral accession(s)\n", scalar @rc_list;
-my %taxon_dict;
-%taxon_dict = map { $_ => "" } @accession_list;
-my $taxonIDs;
-foreach my $line(`grep -ohP ">URS[A-Z0-9]+" $infile | sed 's/>//g' | $bindir/getRNAcentralTaxonID - $db1tsv -`)
-{
-    chomp($line);
-    if ($line=~/(\S+)\t(\S+)$/)
-    {
-        $accession="$1";
-        $taxonIDs="$2";
-        $taxon_dict{$accession}=$taxonIDs;
-    }
-}
+exit();
 
-printf "mapping %d NCBI nucleotide (NT) accession(s)\n", scalar @nt_list;
-for (my $j=0;$j<scalar @nt_list;$j+=$max_split_seqs)
+sub getTaxonID
 {
-    #print "mapping entry $j to ".($j+$max_split_seqs)."\n";
-    my $txt="";
-    foreach (my $i=$j;$i<=$j+$max_split_seqs;$i++)
+    my ($infile,$outfile,$namedmp)=@_;
+
+    my $tmpfile=$outfile.".tmp";
+
+    my @header_list=();
+    my @accession_list=();
+    my $accession="";
+    my @rc_list=();
+    my @nt_list=();
+    my $header;
+    foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
     {
-        $txt.="$nt_list[$i]\n";
+        chomp($header);
+        $accession="";
+        if ($header=~/^(URS[A-Z0-9]+)/) # RNAcentral
+        {
+            $accession="$1";
+            push(@rc_list,($accession)) if (! grep( /^$accession$/, @rc_list));
+        }
+        elsif ($header=~/^([_A-Z0-9]+)[.]/)
+        {
+            $accession="$1";
+            push(@nt_list,($accession)) if (! grep( /^$accession$/, @nt_list));
+        }
+        if (length $accession)
+        {
+            push(@header_list,($header));
+            push(@accession_list,($accession));
+        }
+        else
+        {
+            print "skip unmappable entry >".$header."\n";
+        }
     }
-    open(FP,">$tmpfile");
-    print FP $txt;
-    close(FP);
-    foreach my $line(`$bindir/blastdbcmd -db $db2 -entry_batch $tmpfile -outfmt '%a %T'`)
+
+    printf "mapping %d RNAcentral accession(s)\n", scalar @rc_list;
+    my %taxon_dict;
+    %taxon_dict = map { $_ => "" } @accession_list;
+    my $taxonIDs;
+    foreach my $line(`grep -ohP ">URS[A-Z0-9]+" $infile | sed 's/>//g' | $bindir/getRNAcentralTaxonID - $db1tsv -`)
     {
-        if ($line=~/(\S+)\s(\S+)/)
+        chomp($line);
+        if ($line=~/(\S+)\t(\S+)$/)
         {
             $accession="$1";
             $taxonIDs="$2";
-            $accession="$1" if ($accession=~/(\S+)[.]\d+/);
             $taxon_dict{$accession}=$taxonIDs;
         }
     }
-}
-system("rm $tmpfile");
-
-my %name_dict;
-my $name;
-my $taxonID;
-if (length $namedmp)
-{
-    printf "mapping scientific names\n";
-    foreach my $line(`grep -P "\tscientific name\t" $namedmp`)
+ 
+    printf "mapping %d NCBI nucleotide (NT) accession(s)\n", scalar @nt_list;
+    for (my $j=0;$j<scalar @nt_list;$j+=$max_split_seqs)
     {
-        if ($line=~/^(\d+)\t\|\t([\S\s]+?)\t\|\t/)
+        my $txt="";
+        foreach (my $i=$j;$i<=$j+$max_split_seqs;$i++)
         {
-            $taxonID="$1";
-            $name="$2";
-            $name_dict{$taxonID}=$name;
+            $txt.="$nt_list[$i]\n";
+        }
+        open(FP,">$tmpfile");
+        print FP $txt;
+        close(FP);
+        foreach my $line(`$bindir/blastdbcmd -db $db2 -entry_batch $tmpfile -outfmt '%a %T'`)
+        {
+            if ($line=~/(\S+)\s(\S+)/)
+            {
+                $accession="$1";
+                $taxonIDs="$2";
+                $accession="$1" if ($accession=~/(\S+)[.]\d+/);
+                $taxon_dict{$accession}=$taxonIDs;
+            }
         }
     }
-    printf "read %d scientific names\n",scalar %name_dict;
-}
+    system("rm $tmpfile");
 
-printf "writing mapping file for %d hits\n", scalar @header_list;
-my $txt="#accession\thit\ttaxonID\n";
-$txt="#accession\thit\ttaxonID\tname\n" if (length $namedmp);
-my $names;
-for (my $i=0;$i<scalar @header_list;$i++)
-{
-    $header=$header_list[$i];
-    $accession=$accession_list[$i];
-    $taxonIDs=$taxon_dict{$accession};
-    if (length $taxonIDs==0)
-    {
-        print "failed to map >$header\n";
-    }
+    my %name_dict;
+    my $name;
+    my $taxonID;
     if (length $namedmp)
     {
-        $names="";
-        foreach $taxonID(split(/,/,$taxonIDs))
+        printf "mapping scientific names\n";
+        foreach my $line(`grep -P "\tscientific name\t" $namedmp`)
         {
-            $names.=",$name_dict{$taxonID}" if (exists($name_dict{$taxonID}));
+            if ($line=~/^(\d+)\t\|\t([\S\s]+?)\t\|\t/)
+            {
+                $taxonID="$1";
+                $name="$2";
+                $name_dict{$taxonID}=$name;
+            }
         }
-        $names=substr($names,1);
-        $txt.="$accession\t$header\t$taxonIDs\t$names\n";
+        printf "read %d scientific names\n",scalar %name_dict;
     }
-    else
-    {
-        $txt.="$accession\t$header\t$taxonIDs\n";
-    }
-}
-open(FP,">$outfile");
-print FP $txt;
-close(FP);
 
-exit(0);
+    printf "writing mapping file for %d hits\n", scalar @header_list;
+    my $txt="#accession\thit\ttaxonID\n";
+    $txt="#accession\thit\ttaxonID\tname\n" if (length $namedmp);
+    my $names;
+    for (my $i=0;$i<scalar @header_list;$i++)
+    {
+        $header=$header_list[$i];
+        $accession=$accession_list[$i];
+        $taxonIDs=$taxon_dict{$accession};
+        if (length $taxonIDs==0)
+        {
+            print "failed to map >$header\n";
+        }
+        if (length $namedmp)
+        {
+            $names="";
+            foreach $taxonID(split(/,/,$taxonIDs))
+            {
+                $names.=",$name_dict{$taxonID}" if (exists($name_dict{$taxonID}));
+            }
+            $names=substr($names,1);
+            $txt.="$accession\t$header\t$taxonIDs\t$names\n";
+        }
+        else
+        {
+            $txt.="$accession\t$header\t$taxonIDs\n";
+        }
+    }
+    open(FP,">$outfile");
+    print FP $txt;
+    close(FP);
+}
