@@ -66,40 +66,40 @@ sub filterTaxonID
     foreach my $line(`tail -n+2 $tsvfile`)
     {
         if ($line=~/\S+\t(\S+)\t(\S+)/)
-	{
-	    my $header="$1";
-	    my $taxonIDs="$2";
-	    my $accept_taxonIDs="";
-	    foreach my $taxonID(split(',',$taxonIDs))
-	    {
-	        next if (defined $accept_taxon_dict{$taxonID});
-		$accept_taxonIDs.=",$taxonID";
-		$accept_taxon_dict{$taxonID}=$header;
-	    }
-	    if ($accept_taxonIDs eq "")
-	    {
-	        $reject_header_dict{$header}=$taxonIDs;
+        {
+            my $header="$1";
+            my $taxonIDs="$2";
+            my $accept_taxonIDs="";
+            foreach my $taxonID(split(',',$taxonIDs))
+            {
+                next if (defined $accept_taxon_dict{$taxonID});
+                $accept_taxonIDs.=",$taxonID";
+                $accept_taxon_dict{$taxonID}=$header;
+            }
+            if ($accept_taxonIDs eq "")
+            {
+                $reject_header_dict{$header}=$taxonIDs;
             }
             else
-	    {
-	        #print "$taxonIDs\t$accept_taxonIDs\n";
-	        $accept_header_dict{$header}=substr($accept_taxonIDs,1);
+            {
+                #print "$taxonIDs\t$accept_taxonIDs\n";
+                $accept_header_dict{$header}=substr($accept_taxonIDs,1);
             }
 
-	}
+        }
     }
     my $txt="";
     foreach my $line(`$bindir/fasta2pfam $infile`)
     {
-	if ($line=~/(\S+)\t(\S+)/)
-	{
-	    my $header="$1";
-	    my $sequence="$2";
-	    next if (defined $reject_header_dict{$header});
-	    my $taxonIDs="0";
-	    $taxonIDs=$accept_header_dict{$header} if (defined $accept_header_dict{$header});
-	    $txt.=">$header\t$taxonIDs\n$sequence\n";
-	}
+        if ($line=~/(\S+)\t(\S+)/)
+        {
+            my $header="$1";
+            my $sequence="$2";
+            next if (defined $reject_header_dict{$header});
+            my $taxonIDs="0";
+            $taxonIDs=$accept_header_dict{$header} if (defined $accept_header_dict{$header});
+            $txt.=">$header\t$taxonIDs\n$sequence\n";
+        }
     }
     open(FP,">$outfile");
     print FP $txt;
