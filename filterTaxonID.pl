@@ -11,15 +11,17 @@ my $db2    ="$dbdir/nt";
 my $max_split_seqs=5000;
 
 my $docstring=<<EOF
-getTaxonID.pl seq.afa seq.afa.tsv
-    for rMSA format alignment seq.afa, map each hit to taxonID and output the
-    result to seq.afa.tsv
+filterTaxonID.pl seq.afa seq.afa.tsv seq.filter.afa
+    filter fasta format alignment so that on the first hit for
+    each species is kept
 
-getTaxonID.pl seq.afa seq.afa.tsv names.dmp
-    in addition to taxonID, also map each hit to scientific name
-    "names.dmp" can be downloaded by:
-    \$ wget https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip
-    \$ unzip taxdmp.zip names.dmp
+Input:
+    seq.afa - fasta file, header should start with NCBI NT accession
+              or RNAcentral accession
+
+Output:
+    seq.afa.tsv    - mapping file from fasta header to taxon ID
+    seq.filter.afa - filtered fasta file 
 EOF
 ;
 
@@ -30,9 +32,8 @@ if (@ARGV<2)
 }
 
 my $infile =$ARGV[0];
-my $outfile=$ARGV[1];
-my $namedmp="";
-$namedmp   =$ARGV[2] if (@ARGV>2);
+my $tsvfile=$ARGV[1];
+my $outfile=$ARGV[2];
 
 if (!-s "$db1tsv")
 {
@@ -51,15 +52,65 @@ if (!-s "$db2.nal" && !-s "$db2.ndb")
     exit(1);
 }
 
-&getTaxonID($infile,$outfile,$namedmp);
+&getTaxonID($infile,$tsvfile) if (!-s "$tsvfile");
+&filterTaxonID($infile,$tsvfile,$outfile);
 
 exit();
 
+sub filterTaxonID
+{
+    my ($infile,$tsvfile,$outfile)=@_;
+    my %accept_taxon_dict;
+    my %reject_header_dict;
+    my %accept_header_dict;
+    foreach my $line(`tail -n+2 $tsvfile`)
+    {
+        if ($line=~/\S+\t(\S+)\t(\S+)/)
+	{
+	    my $header="$1";
+	    my $taxonIDs="$2";
+	    my $accept_taxonIDs="";
+	    foreach my $taxonID(split(',',$taxonIDs))
+	    {
+	        next if (defined $accept_taxon_dict{$taxonID});
+		$accept_taxonIDs.=",$taxonID";
+		$accept_taxon_dict{$taxonID}=$header;
+	    }
+	    if ($accept_taxonIDs eq "")
+	    {
+	        $reject_header_dict{$header}=$taxonIDs;
+            }
+            else
+	    {
+	        #print "$taxonIDs\t$accept_taxonIDs\n";
+	        $accept_header_dict{$header}=substr($accept_taxonIDs,1);
+            }
+
+	}
+    }
+    my $txt="";
+    foreach my $line(`$bindir/fasta2pfam $infile`)
+    {
+	if ($line=~/(\S+)\t(\S+)/)
+	{
+	    my $header="$1";
+	    my $sequence="$2";
+	    next if (defined $reject_header_dict{$header});
+	    my $taxonIDs="0";
+	    $taxonIDs=$accept_header_dict{$header} if (defined $accept_header_dict{$header});
+	    $txt.=">$header\t$taxonIDs\n$sequence\n";
+	}
+    }
+    open(FP,">$outfile");
+    print FP $txt;
+    close(FP);
+}
+
 sub getTaxonID
 {
-    my ($infile,$outfile,$namedmp)=@_;
+    my ($infile,$tsvfile)=@_;
 
-    my $tmpfile=$outfile.".tmp";
+    my $tmpfile=$tsvfile.".tmp";
 
     my @header_list=();
     my @accession_list=();
@@ -138,27 +189,8 @@ sub getTaxonID
     }
     system("rm $tmpfile");
 
-    my %name_dict;
-    my $name;
-    my $taxonID;
-    if (length $namedmp)
-    {
-        printf "mapping scientific names\n";
-        foreach my $line(`grep -P "\tscientific name\t" $namedmp`)
-        {
-            if ($line=~/^(\d+)\t\|\t([\S\s]+?)\t\|\t/)
-            {
-                $taxonID="$1";
-                $name="$2";
-                $name_dict{$taxonID}=$name;
-            }
-        }
-        printf "read %d scientific names\n",scalar %name_dict;
-    }
-
     printf "writing mapping file for %d hits\n", scalar @header_list;
     my $txt="#accession\thit\ttaxonID\n";
-    $txt="#accession\thit\ttaxonID\tname\n" if (length $namedmp);
     my $names;
     for (my $i=0;$i<scalar @header_list;$i++)
     {
@@ -169,22 +201,9 @@ sub getTaxonID
         {
             print "failed to map >$header\n";
         }
-        if (length $namedmp)
-        {
-            $names="";
-            foreach $taxonID(split(/,/,$taxonIDs))
-            {
-                $names.=",$name_dict{$taxonID}" if (exists($name_dict{$taxonID}));
-            }
-            $names=substr($names,1);
-            $txt.="$accession\t$header\t$taxonIDs\t$names\n";
-        }
-        else
-        {
-            $txt.="$accession\t$header\t$taxonIDs\n";
-        }
+        $txt.="$accession\t$header\t$taxonIDs\n";
     }
-    open(FP,">$outfile");
+    open(FP,">$tsvfile");
     print FP $txt;
     close(FP);
 }
