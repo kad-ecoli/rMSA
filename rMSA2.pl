@@ -49,9 +49,9 @@ Input:
                 default 0, which means no time limit
     fast      - heuristic level
                 0 - no heuristic for long sequences
-		1 - (default) heuristic to balance accuracy and time for
-		    long sequences
-		2 - aggresive heuristic for all sequences
+                1 - (default) heuristic to balance accuracy and time for
+                    long sequences
+                2 - aggresive heuristic for all sequences
 EOF
 ;
 
@@ -728,7 +728,7 @@ sub addSS2cm
     if (!-s "$tmpdir/nhmmer.sto")
     {
         print "ERROR! Cannot generate $tmpdir/nhmmer.sto\n";
-	exit();
+        exit();
     }
     foreach my $i(`awk '{print \$2}' $tmpdir/nhmmer.sto | head -n5 | tail -n1 | grep -b -o - | sed 's/..\$//'`)
     {
@@ -755,7 +755,7 @@ sub addSS2cm
     if (!-s "$outcm")
     {
         print "ERROR! cmbuild did not make $outcm\n";
-	exit(1);
+        exit(1);
     }
     &System("$bindir/cmcalibrate --cpu $cpu $outcm");
 }
@@ -791,15 +791,15 @@ sub addQuery2a2m
         {
             ## merge msa by clustalo ##
             print "echo $Lch != $Lt. realign by clustalo\n";
-	    &System("$bindir/addQuery2a3m $tmpdir/seq.fasta $outfile.tmp $outfile.a3m > $outfile.cscore");
-	    my $cscore=`cat $outfile.cscore`+0.;
-	    if ($cscore<0.8)
-	    {
-	        print "addQuery2a2m cscore=$cscore. redo alignment by clustalo\n";
+            &System("$bindir/addQuery2a3m $tmpdir/seq.fasta $outfile.tmp $outfile.a3m > $outfile.cscore");
+            my $cscore=`cat $outfile.cscore`+0.;
+            if ($cscore<0.8)
+            {
+                print "addQuery2a2m cscore=$cscore. redo alignment by clustalo\n";
                 &System("$bindir/clustalo --p1=$tmpdir/seq.fasta --p2=$outfile.msa --is-profile --threads=$cpu | $bindir/fastaOneLine - $outfile.afa");
                 &System("$bindir/insAln $outfile.tmp $outfile.afa $outfile.a3m");
-	    }
-	    &System("$bindir/fixAlnX $outfile.a3m N $outfile");
+            }
+            &System("$bindir/fixAlnX $outfile.a3m N $outfile");
         }
         else
         {
